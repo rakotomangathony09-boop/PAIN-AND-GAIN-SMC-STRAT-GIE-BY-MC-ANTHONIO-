@@ -1,9 +1,10 @@
 {
-  "name": "vvip-signal-pro",
-  "version": "2.0.0",
+  "name": "vvip-signal-pro-mcanthonio",
+  "version": "3.1.0",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "postinstall": "npx puppeteer install chrome"
   },
   "dependencies": {
     "express": "^4.18.2",
