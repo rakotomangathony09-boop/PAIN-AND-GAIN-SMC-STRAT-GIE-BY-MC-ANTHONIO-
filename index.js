@@ -8,165 +8,140 @@ const CHAT_ID = process.env.CHAT_ID;
 const PORT = process.env.PORT || 10000;
 
 let markets = {
-    'PAIN400': { price: 0, high: 0, low: 0, status: "SCANNING", color: "text-red-500" },
-    'GAIN400': { price: 0, high: 0, low: 0, status: "SCANNING", color: "text-green-500" }
+    'PAIN400': { price: 0, sweep_level: 0, status: "SCANNING", step: 0 },
+    'GAIN400': { price: 0, sweep_level: 0, status: "SCANNING", step: 0 }
 };
-let systemLogs = [];
+let logs = [];
 
 function addLog(msg) {
-    const time = new Date().toLocaleTimeString('fr-FR', { timeZone: 'Indian/Antananarivo' });
-    systemLogs.unshift(`[${time}] ${msg}`);
-    if (systemLogs.length > 12) systemLogs.pop();
+    const t = new Date().toLocaleTimeString('fr-FR', { timeZone: 'Indian/Antananarivo' });
+    logs.unshift(`[${t}] ${msg}`);
+    if (logs.length > 8) logs.pop();
     console.log(`> ${msg}`);
 }
 
 app.get('/', (req, res) => {
     res.send(`
-    <!DOCTYPE html>
-    <html lang="fr">
-    <head>
-        <meta charset="UTF-8">
-        <title>VVIP SIGNAL PRO - MC ANTHONIO</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <style>
-            body { background-color: #020202; color: #00ff00; font-family: 'Courier New', monospace; overflow-x: hidden; }
-            .b-orange { color: #ff8800; }
-            .b-blue { color: #00e5ff; }
-            .panel { border: 1px solid #1a1a1a; background: #080808; }
-            .btn-bloomberg { border: 1px solid #333; background: #111; color: #00e5ff; font-size: 11px; padding: 6px 12px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-            .btn-bloomberg:hover { background: #ff8800; color: #000; border-color: #ff8800; }
-            .blink { animation: opacity 1.2s infinite; }
-            @keyframes opacity { 50% { opacity: 0.3; } }
-        </style>
-    </head>
-    <body class="p-4">
-        <div class="flex justify-between border-b-2 border-orange-600 pb-2 mb-4">
-            <h1 class="text-2xl font-black b-orange">VVIP SIGNAL PRO - MC ANTHONIO</h1>
-            <div class="text-right b-blue text-xs uppercase font-sans">
-                <p>FEED: WELTRADE LIVE (EAT)</p>
-                <p id="clock">${new Date().toLocaleTimeString('fr-FR', { timeZone: 'Indian/Antananarivo' })}</p>
-            </div>
+    <body style="background:#020202;color:#00ff00;font-family:monospace;padding:20px;margin:0;overflow-x:hidden;">
+        <div style="border-bottom:2px solid #ff8800;display:flex;justify-content:space-between;align-items:center;padding-bottom:10px;">
+            <h1 style="color:#ff8800;margin:0;font-size:20px;">VVIP TERMINAL - MC ANTHONIO</h1>
+            <div style="background:#ff8800;color:#000;padding:5px 12px;font-weight:bold;font-size:12px;border-radius:2px;">TIMEFRAME: M5</div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div style="display:flex;gap:15px;margin:20px 0;">
             ${Object.keys(markets).map(m => `
-                <div class="panel p-3">
-                    <div class="flex justify-between items-center border-b border-zinc-800 mb-2 font-bold text-xs">
-                        <span class="b-blue">${m}</span>
-                        <span class="text-zinc-500 italic">SMC ALGORITHM v2.0</span>
+                <div style="border:1px solid #222;background:#080808;padding:15px;flex:1;">
+                    <div style="color:#00e5ff;font-size:11px;font-weight:bold;text-transform:uppercase;">${m} / WELTRADE</div>
+                    <div style="font-size:35px;font-weight:bold;color:#fff;margin:5px 0;">${markets[m].price || '...'}</div>
+                    <div style="display:flex;gap:4px;margin:10px 0;">
+                        <div style="flex:1;height:15px;font-size:8px;display:flex;align-items:center;justify-content:center;background:${markets[m].step >= 1 ? '#00ff00' : '#222'};color:#000;">SWEEP</div>
+                        <div style="flex:1;height:15px;font-size:8px;display:flex;align-items:center;justify-content:center;background:${markets[m].step >= 2 ? '#00ff00' : '#222'};color:#000;">BOS</div>
+                        <div style="flex:1;height:15px;font-size:8px;display:flex;align-items:center;justify-content:center;background:${markets[m].step >= 3 ? '#00ff00' : '#222'};color:#000;">PULLBACK</div>
+                        <div style="flex:1;height:15px;font-size:8px;display:flex;align-items:center;justify-content:center;background:${markets[m].step >= 4 ? '#ff8800' : '#222'};color:#000;">ENTRY</div>
                     </div>
-                    <div class="text-4xl font-bold ${markets[m].color}">${markets[m].price || 'LOADING...'}</div>
-                    <div class="mt-2 text-[10px] uppercase">
-                        STATUS: <span class="text-white blink">${markets[m].status}</span><br>
-                        <span class="text-zinc-400">LIQ HIGH: ${markets[m].high} | LIQ LOW: ${markets[m].low}</span>
-                    </div>
+                    <div style="font-size:10px;color:#00e5ff;text-transform:uppercase;">${markets[m].status}</div>
                 </div>
             `).join('')}
         </div>
 
-        <div class="panel p-1 mb-4">
-            <div class="flex gap-2 p-2 border-b border-zinc-900 bg-black">
-                <button class="btn-bloomberg" onclick="changeChart('PAIN400')">VIEW PAIN 400 LIVE</button>
-                <button class="btn-bloomberg" onclick="changeChart('GAIN400')">VIEW GAIN 400 LIVE</button>
-            </div>
-            <div id="chart-container" style="height: 400px; background: #000;">
-                <iframe id="tv-iframe" src="https://s.tradingview.com/widgetembed/?symbol=WELTRADE%3APAIN400&interval=5&theme=dark&style=1&locale=fr" width="100%" height="400px" style="border:none;"></iframe>
-            </div>
+        <div style="background:#111;border:1px solid #333;margin-bottom:20px;">
+            <iframe id="tv" src="https://s.tradingview.com/widgetembed/?symbol=WELTRADE%3APAIN400&interval=5&theme=dark" width="100%" height="380px" style="border:none;"></iframe>
         </div>
 
-        <div class="panel p-3 h-48 overflow-hidden text-[10px] font-mono leading-tight">
-            <h2 class="b-orange underline mb-2 uppercase text-[11px]">System Activity Logs</h2>
-            <div id="logs">${systemLogs.map(l => `<div class="border-b border-zinc-900 pb-1">> ${l}</div>`).join('')}</div>
+        <div style="background:#050505;border:1px solid #222;padding:10px;height:100px;font-size:10px;overflow:hidden;">
+            <div style="color:#ff8800;border-bottom:1px solid #222;margin-bottom:5px;">REAL-TIME ACTIVITY LOGS</div>
+            ${logs.map(l => `<div style="color:#777;">> ${l}</div>`).join('')}
         </div>
-
-        <script>
-            function changeChart(asset) {
-                document.getElementById('tv-iframe').src = "https://s.tradingview.com/widgetembed/?symbol=WELTRADE%3A" + asset + "&interval=5&theme=dark&style=1&locale=fr";
-            }
-            // Actualisation automatique des prix
-            setInterval(() => { location.reload(); }, 20000);
-        </script>
+        <script>setTimeout(()=>location.reload(), 15000);</script>
     </body>
-    </html>
     `);
 });
 
-// LOGIQUE SMC ET PUPPETEER
-async function startTerminal() {
-    addLog("Initialisation du système autonome...");
-    
-    // Configuration optimisée pour Render (sans forcer de chemin)
-    const browser = await puppeteer.launch({
-        headless: "new",
-        args: [
-            '--no-sandbox', 
-            '--disable-setuid-sandbox', 
-            '--disable-dev-shm-usage',
-            '--single-process'
-        ]
-    });
-
-    const assets = [
-        { id: 'PAIN400', url: 'https://www.tradingview.com/chart/?symbol=WELTRADE:PAIN400' },
-        { id: 'GAIN400', url: 'https://www.tradingview.com/chart/?symbol=WELTRADE:GAIN400' }
-    ];
-
-    for (const asset of assets) {
+async function startRobot() {
+    addLog("Initialisation du navigateur Puppeteer...");
+    try {
+        const browser = await puppeteer.launch({
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        });
         const page = await browser.newPage();
-        try {
-            await page.goto(asset.url, { waitUntil: 'networkidle2', timeout: 60000 });
-            addLog(`✅ Flux ${asset.id} synchronisé.`);
-            
-            setInterval(async () => {
-                try {
-                    const price = await page.evaluate(() => {
-                        const el = document.querySelector('.last-K_uL78S-');
-                        return el ? parseFloat(el.innerText.replace(',', '')) : null;
-                    });
-                    if (price) {
-                        markets[asset.id].price = price;
-                        runSMCLogic(asset.id, price);
-                    }
-                } catch (e) {}
-            }, 5000);
-        } catch (err) {
-            addLog(`❌ Erreur ${asset.id}: ${err.message}`);
-        }
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+        
+        addLog("Connexion aux serveurs Weltrade...");
+        await page.goto('https://www.tradingview.com/chart/?symbol=WELTRADE:PAIN400', { waitUntil: 'networkidle2', timeout: 90000 });
+        addLog("Flux M5 synchronisé. Analyse active.");
+
+        setInterval(async () => {
+            try {
+                const priceText = await page.evaluate(() => {
+                    const el = document.querySelector('.last-K_uL78S-');
+                    return el ? el.innerText : null;
+                });
+
+                if (priceText) {
+                    const currentPrice = parseFloat(priceText.replace(',', ''));
+                    markets.PAIN400.price = currentPrice;
+                    runSMCLogic('PAIN400', currentPrice);
+                }
+            } catch (e) {}
+        }, 6000);
+    } catch (err) {
+        addLog("Erreur de lancement: " + err.message);
     }
 }
 
 function runSMCLogic(id, price) {
     let m = markets[id];
     
-    // Initialisation des niveaux
-    if (m.high === 0) { 
-        m.high = price + 10.5; 
-        m.low = price - 10.5; 
+    // Initialisation dynamique du niveau de liquidité au premier passage
+    if (m.sweep_level === 0) { 
+        m.sweep_level = price + 10.5; 
+        m.status = "SCANNING M5";
         return; 
     }
 
-    // Détection SWEEP
-    if (price > m.high && m.status !== "SWEEP_DETECTED") {
-        m.status = "SWEEP_DETECTED";
-        addLog(`⚠️ [${id}] LIQUIDITY SWEEP DÉTECTÉ À ${price}`);
+    // ETAPE 1 : SWEEP DE LIQUIDITE
+    if (price > m.sweep_level && m.step === 0) {
+        m.step = 1;
+        m.status = "LIQUIDITY SWEEP DETECTED";
+        addLog(`${id}: Sweep détecté à ${price}`);
     }
 
-    // Confirmation BOS et Signal
-    if (m.status === "SWEEP_DETECTED" && price < m.high - 1.8) {
-        m.status = "BOS_CONFIRMED";
-        sendTelegram(id, "SELL", price);
-        addLog(`🎯 [${id}] BOS VALIDÉ. SIGNAL ENVOYÉ SUR TELEGRAM.`);
-        m.status = "SCANNING";
-        m.high = price + 12; // Reset
+    // ETAPE 2 : BOS (BREAK OF STRUCTURE)
+    if (m.step === 1 && price < m.sweep_level - 2.8) {
+        m.step = 2;
+        m.status = "BOS CONFIRMED - WAITING PULLBACK";
+        addLog(`${id}: Structure cassée. Attente pullback vers ${m.sweep_level}`);
+    }
+
+    // ETAPE 3 : PULLBACK (Retour vers le niveau balayé)
+    if (m.step === 2 && price >= m.sweep_level - 1.2) {
+        m.step = 3;
+        m.status = "PULLBACK IN PROGRESS";
+        addLog(`${id}: Prix en zone de pullback.`);
+    }
+
+    // ETAPE 4 : ENTRY (Toucher précis du niveau sweeped)
+    if (m.step === 3 && price >= m.sweep_level - 0.2) {
+        m.step = 4;
+        m.status = "ENTRY EXECUTED";
+        sendSignalTelegram(id, price);
+        
+        // Pause de 2 min avant de réinitialiser pour éviter les faux signaux en boucle
+        setTimeout(() => {
+            m.step = 0;
+            m.sweep_level = price + 15;
+            m.status = "SCANNING M5";
+        }, 120000);
     }
 }
 
-async function sendTelegram(pair, type, price) {
-    const msg = `📡 **VVIP SIGNAL PRO : ${pair}**\n━━━━━━━━━━━━━━━━━━\n⚡ **SIGNAL :** ${type} 🔴\n🎯 **PRIX D'ENTRÉE :** ${price}\n📊 **CONFIRMATION :** Sweep + BOS M5\n━━━━━━━━━━━━━━━━━━\n✅ *Mc Anthonio - Autonomous Trading System*`;
-    bot.telegram.sendMessage(CHAT_ID, msg, { parse_mode: 'Markdown' }).catch(e => console.log("Telegram Error"));
+async function sendSignalTelegram(asset, price) {
+    const msg = `🔥 **VVIP EXECUTION : ${asset}**\n━━━━━━━━━━━━━━━━━━\n📈 **TIMEFRAME :** M5\n🔴 **ORDRE :** SELL (Limit Reached)\n🎯 **ENTRÉE :** ${price}\n✅ **STRATÉGIE :** Sweep + BOS + Pullback\n━━━━━━━━━━━━━━━━━━\n🔱 *Mc Anthonio - High Precision Trading*`;
+    bot.telegram.sendMessage(CHAT_ID, msg, { parse_mode: 'Markdown' }).catch(e => console.error("Telegram Error"));
+    addLog(`SIGNAL ENVOYE: SELL ${asset} @ ${price}`);
 }
 
 app.listen(PORT, () => {
-    addLog(`VVIP Terminal démarré sur le port ${PORT}`);
-    startTerminal();
+    console.log(`> Terminal VVIP Live sur port ${PORT}`);
+    startRobot();
 });
