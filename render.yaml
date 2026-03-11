@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: bloomberg-terminal-mc
+    name: pain-and-gain-smc-terminal
     env: node
     plan: free
     region: frankfurt
