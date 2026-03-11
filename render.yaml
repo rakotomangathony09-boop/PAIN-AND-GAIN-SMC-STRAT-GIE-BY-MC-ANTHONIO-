@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: bloomberg-smc-terminal
+    name: bloomberg-terminal-mc
     env: node
     plan: free
     region: frankfurt
