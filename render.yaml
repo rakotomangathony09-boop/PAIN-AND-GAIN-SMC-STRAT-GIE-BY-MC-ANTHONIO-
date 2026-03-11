@@ -1,15 +1,18 @@
 services:
   - type: web
-    name: vvip-signal-pro
+    name: vvip-signal-pro-mcanthonio
     env: node
     plan: free
-    region: frankfurt
+    region: frankfurt # Région stable pour Madagascar
     buildCommand: npm install
     startCommand: node index.js
     envVars:
       - key: BOT_TOKEN
-        sync: false
+        sync: false # À configurer dans le dashboard Render (Secret)
       - key: CHAT_ID
-        sync: false
+        sync: false # À configurer dans le dashboard Render (Secret)
       - key: PUPPETEER_CACHE_DIR
         value: "/opt/render/project/src/.cache"
+      - key: NODE_VERSION
+        value: "20.x"
+    autoDeploy: true
