@@ -1,14 +1,17 @@
 {
   "name": "bloomberg-smc-terminal",
-  "version": "1.1.0",
-  "description": "Terminal Pro pour Pain/Gain 400",
+  "version": "1.2.0",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "postinstall": "npx puppeteer install"
   },
   "dependencies": {
     "express": "^4.18.2",
     "puppeteer": "^21.0.0",
     "telegraf": "^4.12.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
   }
 }
