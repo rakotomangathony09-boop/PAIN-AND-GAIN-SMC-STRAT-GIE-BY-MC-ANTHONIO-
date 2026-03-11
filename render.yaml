@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: pain-and-gain-smc-terminal
+    name: vvip-signal-pro
     env: node
     plan: free
     region: frankfurt
@@ -11,5 +11,5 @@ services:
         sync: false
       - key: CHAT_ID
         sync: false
-      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
-        value: "false"
+      - key: PUPPETEER_CACHE_DIR
+        value: "/opt/render/project/src/.cache"
