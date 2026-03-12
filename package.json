@@ -1,7 +1,6 @@
 {
   "name": "vvip-terminal-mcanthonio",
   "version": "1.1.0",
-  "description": "Terminal Pro Mc Anthonio Duo",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
