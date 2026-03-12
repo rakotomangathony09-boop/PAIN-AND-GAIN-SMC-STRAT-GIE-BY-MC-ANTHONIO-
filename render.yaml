@@ -13,5 +13,5 @@ services:
         sync: false
       - key: CHAT_ID
         sync: false
-      - key: PUPPETEER_SKIP_DOWNLOAD
-        value: "true"
+      - key: PUPPETEER_CACHE_DIR
+        value: "/opt/render/project/src/.cache/puppeteer"
