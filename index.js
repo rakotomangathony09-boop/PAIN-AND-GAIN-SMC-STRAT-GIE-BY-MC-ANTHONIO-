@@ -8,84 +8,120 @@ const CHAT_ID = process.env.CHAT_ID;
 const PORT = process.env.PORT || 10000;
 
 let markets = {
-    'PAIN400': { price: 0, sweep_level: 0, status: "SCANNING M5", step: 0 }
+    'PAIN400': { price: 0, high_sweep: 0, low_sweep: 0, max_session: 0, min_session: 0, status: "SCANNING", step: 0, active_trade: null },
+    'GAIN400': { price: 0, high_sweep: 0, low_sweep: 0, max_session: 0, min_session: 0, status: "SCANNING", step: 0, active_trade: null }
 };
 let logs = [];
 
 function addLog(msg) {
     const t = new Date().toLocaleTimeString('fr-FR', { timeZone: 'Indian/Antananarivo' });
     logs.unshift(`[${t}] ${msg}`);
-    if (logs.length > 8) logs.pop();
-    console.log(`> ${msg}`);
+    if (logs.length > 10) logs.pop();
 }
 
 app.get('/', (req, res) => {
     res.send(`
-    <body style="background:#020202;color:#00ff00;font-family:monospace;padding:20px;margin:0;">
-        <h1 style="color:#ff8800;border-bottom:2px solid #ff8800;padding-bottom:10px;">VVIP TERMINAL - MC ANTHONIO</h1>
-        <div style="display:flex;gap:15px;margin:20px 0;">
-            <div style="border:1px solid #222;background:#080808;padding:15px;flex:1;">
-                <div style="color:#00e5ff;font-size:11px;">PAIN 400 LIVE</div>
-                <div style="font-size:35px;font-weight:bold;color:#fff;">${markets.PAIN400.price || '...'}</div>
-                <div style="font-size:10px;color:#00e5ff;">STATUS: ${markets.PAIN400.status}</div>
-            </div>
+    <body style="background:#020202;color:#00ff00;font-family:monospace;padding:20px;margin:0;text-align:center;">
+        <h1 style="color:#ff8800;border-bottom:2px solid #ff8800;padding-bottom:10px;">VVIP TERMINAL DUO - MC ANTHONIO</h1>
+        <div style="display:flex;gap:15px;margin:20px 0;justify-content:center;">
+            ${Object.keys(markets).map(sym => `
+                <div style="flex:1;max-width:300px;border:2px solid #333;background:#0a0a0a;padding:20px;border-radius:10px;">
+                    <div style="color:#00e5ff;font-size:14px;">${sym}</div>
+                    <div style="font-size:40px;font-weight:bold;color:#fff;margin:10px 0;">${markets[sym].price > 0 ? markets[sym].price.toFixed(2) : '...'}</div>
+                    <div style="font-size:12px;color:#ff8800;">${markets[sym].status}</div>
+                </div>
+            `).join('')}
         </div>
-        <div style="background:#050505;border:1px solid #222;padding:10px;color:#777;font-size:12px;">
-            <div style="color:#ff8800;margin-bottom:5px;">LOGS D'ANALYSE :</div>
-            ${logs.map(l => `<div>> ${l}</div>`).join('')}
+        <div style="background:#050505;border:1px solid #222;padding:15px;height:200px;overflow-y:auto;text-align:left;border-radius:5px;">
+            <div style="color:#ff8800;font-weight:bold;margin-bottom:10px;">FLUX SMC EN TEMPS RÉEL :</div>
+            ${logs.map(l => `<div style="border-left:2px solid #333;padding-left:10px;margin-bottom:5px;">> ${l}</div>`).join('')}
         </div>
-        <script>setTimeout(()=>location.reload(), 10000);</script>
+        <script>setTimeout(()=>location.reload(), 6000);</script>
     </body>
     `);
 });
 
 async function startRobot() {
-    addLog("Lancement du moteur Mc Anthonio...");
+    addLog("Lancement du Système Duo...");
     try {
         const browser = await puppeteer.launch({ 
-            executablePath: '/usr/bin/google-chrome', // Utilise le Chrome de Render
             headless: "new",
-            args: ['--no-sandbox', '--disable-setuid-sandbox'] 
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] 
         });
         const page = await browser.newPage();
-        await page.goto('https://www.tradingview.com/chart/?symbol=WELTRADE:PAIN400', { waitUntil: 'networkidle2' });
         
-        addLog("Flux Weltrade Synchronisé.");
+        for (const sym of ['PAIN400', 'GAIN400']) {
+            await page.goto(`https://www.tradingview.com/chart/?symbol=WELTRADE:${sym}`, { waitUntil: 'domcontentloaded' });
+            addLog(`Connecté à ${sym}`);
+            
+            setInterval(async () => {
+                try {
+                    const priceText = await page.evaluate(() => {
+                        const el = document.querySelector('.last-K_uL78S-');
+                        return el ? el.innerText : null;
+                    });
 
-        setInterval(async () => {
-            try {
-                const priceText = await page.evaluate(() => {
-                    const el = document.querySelector('.last-K_uL78S-');
-                    return el ? el.innerText : null;
-                });
+                    if (priceText) {
+                        const price = parseFloat(priceText.replace(',', ''));
+                        let m = markets[sym];
+                        m.price = price;
 
-                if (priceText) {
-                    const price = parseFloat(priceText.replace(',', ''));
-                    markets.PAIN400.price = price;
-                    
-                    let m = markets.PAIN400;
-                    if (m.sweep_level === 0) { m.sweep_level = price + 10; return; }
+                        if (m.max_session === 0) { 
+                            m.max_session = price; m.min_session = price; 
+                            m.high_sweep = price + 10; m.low_sweep = price - 10; 
+                            return; 
+                        }
 
-                    // LOGIQUE SMC
-                    if (price > m.sweep_level && m.step === 0) {
-                        m.step = 1; m.status = "LIQUIDITY SWEEP";
-                        addLog("Alerte: Sweep détecté !");
+                        // GESTION BREAK EVEN
+                        if (m.active_trade) {
+                            const { type, entry, tp1 } = m.active_trade;
+                            if ((type === "SELL" && price <= tp1) || (type === "BUY" && price >= tp1)) {
+                                bot.telegram.sendMessage(CHAT_ID, `🛡️ **BE ALERTE - ${sym}**\nTP1 atteint ! Sécurisez au prix d'entrée : **${entry.toFixed(2)}**`);
+                                m.active_trade = null;
+                            }
+                        }
+
+                        // LOGIQUE VENTE
+                        if (price > m.high_sweep && m.step === 0) { m.step = 1; m.status = "SWEEP HAUT"; }
+                        if (m.step === 1 && price < m.high_sweep - 3) { m.step = 2; m.status = "BOS SELL"; }
+                        if (m.step === 2 && price >= m.high_sweep - 0.5) {
+                            const sl = m.high_sweep + 2;
+                            const tp1 = price - ((sl - price) * 3);
+                            envoiSignal(sym, "SELL", price, sl, tp1, m.min_session);
+                            m.active_trade = { type: "SELL", entry: price, tp1: tp1 };
+                            resetMarket(m);
+                        }
+
+                        // LOGIQUE ACHAT
+                        if (price < m.low_sweep && m.step === 0) { m.step = -1; m.status = "SWEEP BAS"; }
+                        if (m.step === -1 && price > m.low_sweep + 3) { m.step = -2; m.status = "BOS BUY"; }
+                        if (m.step === -2 && price <= m.low_sweep + 0.5) {
+                            const sl = m.low_sweep - 2;
+                            const tp1 = price + ((price - sl) * 3);
+                            envoiSignal(sym, "BUY", price, sl, tp1, m.max_session);
+                            m.active_trade = { type: "BUY", entry: price, tp1: tp1 };
+                            resetMarket(m);
+                        }
+
+                        if (price > m.max_session) m.max_session = price;
+                        if (price < m.min_session) m.min_session = price;
                     }
-                    if (m.step === 1 && price < m.sweep_level - 3) {
-                        m.step = 2; m.status = "BOS CONFIRMED";
-                        addLog("Alerte: Cassure de structure !");
-                    }
-                    if (m.step === 2 && price >= m.sweep_level - 0.5) {
-                        m.step = 3;
-                        const msg = `🔥 **SIGNAL VVIP MC ANTHONIO**\n📈 PAIN 400 (M5)\n🔴 ORDRE : SELL\n🎯 PRIX : ${price}\n✅ Stratégie : SMC Sweep + BOS`;
-                        bot.telegram.sendMessage(CHAT_ID, msg, { parse_mode: 'Markdown' });
-                        addLog("SIGNAL ENVOYÉ SUR TELEGRAM");
-                        setTimeout(() => { m.step = 0; m.sweep_level = price + 10; }, 60000);
-                    }
-                }
-            } catch (e) {}
-        }, 8000);
-    } catch (err) { addLog("Erreur: " + err.message); }
+                } catch (e) {}
+            }, 7000);
+            await new Promise(r => setTimeout(r, 2000));
+        }
+    } catch (err) { addLog("Erreur Critique."); }
+}
+
+function envoiSignal(sym, type, entry, sl, tp1, tpFinal) {
+    const emoji = type === "BUY" ? "🔵" : "🔴";
+    bot.telegram.sendMessage(CHAT_ID, `🔥 **SIGNAL VVIP**\n\n📈 ACTIF : **${sym}**\n${emoji} ORDRE : **${type}**\n\n🎯 ENTRÉE : **${entry.toFixed(2)}**\n🛑 STOP : **${sl.toFixed(2)}**\n💰 TP1 : **${tp1.toFixed(2)}**\n🚀 TP FINAL : **${tpFinal.toFixed(2)}**`, { parse_mode: 'Markdown' });
+    addLog(`SIGNAL ${type} ${sym} ENVOYÉ`);
+}
+
+function resetMarket(m) {
+    m.step = 0; m.status = "SCANNING";
+    m.high_sweep = m.price + 10; m.low_sweep = m.price - 10;
 }
 
 app.listen(PORT, () => startRobot());
