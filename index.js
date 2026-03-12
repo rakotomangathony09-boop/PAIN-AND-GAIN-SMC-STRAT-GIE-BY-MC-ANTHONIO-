@@ -8,14 +8,14 @@ const CHAT_ID = process.env.CHAT_ID;
 const PORT = process.env.PORT || 10000;
 
 let markets = {
-    'PAIN400': { price: 0, high_sweep: 0, low_sweep: 0, max_session: 0, min_session: 0, status: "SCANNING", step: 0, active_trade: null },
-    'GAIN400': { price: 0, high_sweep: 0, low_sweep: 0, max_session: 0, min_session: 0, status: "SCANNING", step: 0, active_trade: null }
+    'PAIN400': { price: 0, high_sweep: 0, low_sweep: 0, max_session: 0, min_session: 0, status: "INITIALISATION", step: 0, active_trade: null },
+    'GAIN400': { price: 0, high_sweep: 0, low_sweep: 0, max_session: 0, min_session: 0, status: "INITIALISATION", step: 0, active_trade: null }
 };
 let logs = [];
 
 function addLog(msg) {
     const t = new Date().toLocaleTimeString('fr-FR', { timeZone: 'Indian/Antananarivo' });
-    logs.unshift(`[${t}] ${msg}`);
+    logs.unshift("[" + t + "] " + msg);
     if (logs.length > 10) logs.pop();
 }
 
@@ -42,18 +42,19 @@ app.get('/', (req, res) => {
 });
 
 async function startRobot() {
-    addLog("Initialisation du navigateur...");
+    addLog("Lancement du Système Duo Mc Anthonio...");
     try {
         const browser = await puppeteer.launch({ 
             headless: "new",
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] 
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] 
         });
         const page = await browser.newPage();
-        
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36');
+
         for (const sym of ['PAIN400', 'GAIN400']) {
             const url = "https://www.tradingview.com/chart/?symbol=WELTRADE:" + sym;
-            await page.goto(url, { waitUntil: 'domcontentloaded' });
-            addLog("Connecté à " + sym);
+            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            addLog("Connecté au flux : " + sym);
             
             setInterval(async () => {
                 try {
@@ -66,6 +67,7 @@ async function startRobot() {
                         const price = parseFloat(priceText.replace(',', ''));
                         let m = markets[sym];
                         m.price = price;
+                        m.status = "SCANNING M5";
 
                         if (m.max_session === 0) { 
                             m.max_session = price; m.min_session = price; 
@@ -73,15 +75,17 @@ async function startRobot() {
                             return; 
                         }
 
+                        // GESTION BREAK EVEN
                         if (m.active_trade) {
                             const { type, entry, tp1 } = m.active_trade;
                             if ((type === "SELL" && price <= tp1) || (type === "BUY" && price >= tp1)) {
-                                bot.telegram.sendMessage(CHAT_ID, "🛡️ **BE ALERTE - " + sym + "**\nTP1 atteint ! Sécurisez au prix d'entrée : **" + entry.toFixed(2) + "**");
+                                bot.telegram.sendMessage(CHAT_ID, "🛡️ **BE ALERTE - " + sym + "**\nTP1 atteint ! Mettez à l'entrée : **" + entry.toFixed(2) + "**");
                                 m.active_trade = null;
                             }
                         }
 
-                        if (price > m.high_sweep && m.step === 0) { m.step = 1; m.status = "LIQUIDITY SWEEP"; addLog(sym + ": Sweep détecté !"); }
+                        // STRATÉGIE SMC VENTE
+                        if (price > m.high_sweep && m.step === 0) { m.step = 1; m.status = "LIQUIDITY SWEEP"; addLog(sym + ": Sweep Haut détecté !"); }
                         if (m.step === 1 && price < m.high_sweep - 3) { m.step = 2; m.status = "BOS SELL CONFIRMED"; }
                         if (m.step === 2 && price >= m.high_sweep - 0.5) {
                             const sl = m.high_sweep + 2;
@@ -91,7 +95,8 @@ async function startRobot() {
                             resetMarket(m);
                         }
 
-                        if (price < m.low_sweep && m.step === 0) { m.step = -1; m.status = "LIQUIDITY SWEEP"; }
+                        // STRATÉGIE SMC ACHAT
+                        if (price < m.low_sweep && m.step === 0) { m.step = -1; m.status = "LIQUIDITY SWEEP"; addLog(sym + ": Sweep Bas détecté !"); }
                         if (m.step === -1 && price > m.low_sweep + 3) { m.step = -2; m.status = "BOS BUY CONFIRMED"; }
                         if (m.step === -2 && price <= m.low_sweep + 0.5) {
                             const sl = m.low_sweep - 2;
@@ -106,9 +111,9 @@ async function startRobot() {
                     }
                 } catch (e) {}
             }, 8000);
-            await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, 5000));
         }
-    } catch (err) { addLog("Erreur. Utilisez 'Clear Build Cache' sur Render."); }
+    } catch (err) { addLog("Erreur de navigateur. Relancez le build."); }
 }
 
 function envoiSignal(sym, type, entry, sl, tp1, tpFinal) {
