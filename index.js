@@ -8,8 +8,8 @@ const CHAT_ID = process.env.CHAT_ID;
 const PORT = process.env.PORT || 10000;
 
 let markets = {
-    'PAIN400': { price: 0, high_sweep: 0, low_sweep: 0, max_session: 0, min_session: 0, status: "INITIALISATION", step: 0, active_trade: null },
-    'GAIN400': { price: 0, high_sweep: 0, low_sweep: 0, max_session: 0, min_session: 0, status: "INITIALISATION", step: 0, active_trade: null }
+    'PAIN400': { price: 0, high_sweep: 0, low_sweep: 0, max_session: 0, min_session: 0, status: "SCANNING", step: 0, active_trade: null },
+    'GAIN400': { price: 0, high_sweep: 0, low_sweep: 0, max_session: 0, min_session: 0, status: "SCANNING", step: 0, active_trade: null }
 };
 let logs = [];
 
@@ -42,7 +42,7 @@ app.get('/', (req, res) => {
 });
 
 async function startRobot() {
-    addLog("Recherche du navigateur Chrome...");
+    addLog("Initialisation du navigateur...");
     try {
         const browser = await puppeteer.launch({ 
             headless: "new",
@@ -51,8 +51,9 @@ async function startRobot() {
         const page = await browser.newPage();
         
         for (const sym of ['PAIN400', 'GAIN400']) {
-            await page.goto(\`https://www.tradingview.com/chart/?symbol=WELTRADE:\${sym}\`, { waitUntil: 'domcontentloaded' });
-            addLog(\`Flux \${sym} Connecté.\`);
+            const url = "https://www.tradingview.com/chart/?symbol=WELTRADE:" + sym;
+            await page.goto(url, { waitUntil: 'domcontentloaded' });
+            addLog("Connecté à " + sym);
             
             setInterval(async () => {
                 try {
@@ -72,17 +73,15 @@ async function startRobot() {
                             return; 
                         }
 
-                        // GESTION BREAK EVEN
                         if (m.active_trade) {
                             const { type, entry, tp1 } = m.active_trade;
                             if ((type === "SELL" && price <= tp1) || (type === "BUY" && price >= tp1)) {
-                                bot.telegram.sendMessage(CHAT_ID, \`🛡️ **BE ALERTE - \${sym}**\nTP1 atteint ! Sécurisez au prix d'entrée : **\${entry.toFixed(2)}**\`);
+                                bot.telegram.sendMessage(CHAT_ID, "🛡️ **BE ALERTE - " + sym + "**\nTP1 atteint ! Sécurisez au prix d'entrée : **" + entry.toFixed(2) + "**");
                                 m.active_trade = null;
                             }
                         }
 
-                        // LOGIQUE SMC VENTE
-                        if (price > m.high_sweep && m.step === 0) { m.step = 1; m.status = "LIQUIDITY SWEEP"; addLog(\`\${sym}: Sweep détecté !\`); }
+                        if (price > m.high_sweep && m.step === 0) { m.step = 1; m.status = "LIQUIDITY SWEEP"; addLog(sym + ": Sweep détecté !"); }
                         if (m.step === 1 && price < m.high_sweep - 3) { m.step = 2; m.status = "BOS SELL CONFIRMED"; }
                         if (m.step === 2 && price >= m.high_sweep - 0.5) {
                             const sl = m.high_sweep + 2;
@@ -92,7 +91,6 @@ async function startRobot() {
                             resetMarket(m);
                         }
 
-                        // LOGIQUE SMC ACHAT
                         if (price < m.low_sweep && m.step === 0) { m.step = -1; m.status = "LIQUIDITY SWEEP"; }
                         if (m.step === -1 && price > m.low_sweep + 3) { m.step = -2; m.status = "BOS BUY CONFIRMED"; }
                         if (m.step === -2 && price <= m.low_sweep + 0.5) {
@@ -107,15 +105,15 @@ async function startRobot() {
                         if (price < m.min_session) m.min_session = price;
                     }
                 } catch (e) {}
-            }, 7000);
+            }, 8000);
             await new Promise(r => setTimeout(r, 2000));
         }
-    } catch (err) { addLog("Erreur Critique. Relancez 'Clear Build Cache'."); }
+    } catch (err) { addLog("Erreur. Utilisez 'Clear Build Cache' sur Render."); }
 }
 
 function envoiSignal(sym, type, entry, sl, tp1, tpFinal) {
     const emoji = type === "BUY" ? "🔵" : "🔴";
-    const msg = \`🔥 **VVIP SIGNAL Mc ANTHONIO**\n\n📈 ACTIF : **\${sym}**\n\${emoji} ORDRE : **\${type}**\n\n🎯 ENTRÉE : **\${entry.toFixed(2)}**\n🛑 STOP : **\${sl.toFixed(2)}**\n💰 TP1 : **\${tp1.toFixed(2)}**\n🚀 TP FINAL : **\${tpFinal.toFixed(2)}**\`;
+    const msg = "🔥 **SIGNAL VVIP Mc ANTHONIO**\n\n📈 ACTIF : **" + sym + "**\n" + emoji + " ORDRE : **" + type + "**\n\n🎯 ENTRÉE : **" + entry.toFixed(2) + "**\n🛑 STOP : **" + sl.toFixed(2) + "**\n💰 TP1 : **" + tp1.toFixed(2) + "**\n🚀 TP FINAL : **" + tpFinal.toFixed(2) + "**";
     bot.telegram.sendMessage(CHAT_ID, msg, { parse_mode: 'Markdown' });
 }
 
